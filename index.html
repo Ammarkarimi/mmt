@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TripSaathi – Flights, Hotels, Holidays, Trains, Buses &amp; Cabs</title>
+  <meta name="description" content="Book flights, hotels, homestays, holiday packages, trains, buses and cabs with TripSaathi – your companion on every journey.">
+  <meta name="theme-color" content="#0b1437">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="home">
+  <div class="hero">
+    <div class="hero-bg" id="heroBg"></div>
+    <div id="ts-header"></div>
+    <div class="container">
+      <nav class="sw-tabs" id="swTabs" aria-label="Choose a product"></nav>
+      <section class="sw" id="sw" aria-label="Search"></section>
+      <p class="hero-tagline"><b>TripSaathi</b> · Har safar ka saathi · Trusted by travellers across India</p>
+    </div>
+  </div>
+
+  <main class="container">
+    <div class="quick" id="quick"></div>
+
+    <section class="sec sec-card" id="offers">
+      <div class="sec-h">
+        <div class="row" style="gap:22px;flex-wrap:wrap">
+          <h2>Offers</h2>
+          <div class="tabs-line" id="offerTabs"></div>
+        </div>
+        <div class="right">
+          <a class="view-all" href="offers.html">VIEW ALL <span aria-hidden="true">›</span></a>
+          <div class="arrows"><button type="button" data-dir="-1" aria-label="Previous offers">‹</button><button type="button" data-dir="1" aria-label="Next offers">›</button></div>
+        </div>
+      </div>
+      <div class="offers-track" id="offerTrack"></div>
+    </section>
+
+    <section class="sec app-banner">
+      <div>
+        <h3>Download the <span>TripSaathi</span> app now!</h3>
+        <p>Use code <b>WELCOMETS</b> and get up to ₹1,000 off on your first domestic flight booking.</p>
+        <form class="app-get" id="appGet">
+          <div class="phone-in"><span>+91</span><input type="tel" maxlength="10" inputmode="numeric" placeholder="Enter mobile number"></div>
+          <button class="btn-cta" type="submit">GET APP LINK</button>
+        </form>
+      </div>
+      <div class="app-right">
+        <div class="store"><span>GET IT ON<b>App Store</b></span><span>GET IT ON<b>Play Store</b></span></div>
+        <div class="qr" id="qr" aria-label="QR code"></div>
+        <div class="phone-mock hide-sm" id="phoneMock"></div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><div><h2>Popular Flight Routes</h2><p>Lowest fares found in the last 24 hours</p></div></div>
+      <div class="routes" id="routes"></div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><div><h2>Handpicked Collections for You</h2><p>Stays curated by our travel experts</p></div></div>
+      <div class="coll-grid" id="collections"></div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><div><h2>Trending Holiday Packages</h2><p>Flights, stays and sightseeing – all sorted</p></div><a class="view-all" href="holidays.html">VIEW ALL <span aria-hidden="true">›</span></a></div>
+      <div class="pkg-row" id="pkgRow"></div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><div><h2>Unlock Lesser-Known Wonders of India</h2><p>Offbeat places that deserve a spot on your list</p></div></div>
+      <div class="gems" id="gems"></div>
+    </section>
+
+    <section class="sec trust" id="trust"></section>
+  </main>
+
+  <div id="ts-footer"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/common.js"></script>
+  <script src="assets/js/search.js"></script>
+  <script src="assets/js/home.js"></script>
+</body>
+</html>

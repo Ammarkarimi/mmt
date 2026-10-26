@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 64" width="300" height="64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF9A3D"/><stop offset=".55" stop-color="#FF5A4E"/><stop offset="1" stop-color="#F0386B"/></linearGradient>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FF9A3D"/><stop offset="1" stop-color="#F0386B"/></linearGradient>
+  </defs>
+  <g transform="translate(4 6) scale(1.083)">
+    <rect width="48" height="48" rx="14" fill="url(#g)"/>
+    <path d="M9.5 35.5c5 4.2 15.5 4.6 22-2.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-dasharray=".2 4.6" opacity=".95"/>
+    <path d="M10.5 21.5L38.5 10.5 24.2 26.4z" fill="#fff"/>
+    <path d="M24.2 26.4L38.5 10.5 30.2 37.2z" fill="#FFE1D6"/>
+    <path d="M24.2 26.4l1.6 5.6 4.4 5.2z" fill="#FFC2AE"/>
+  </g>
+  <text x="68" y="40" font-family="Lato, 'Segoe UI', Arial, sans-serif" font-size="34" font-weight="900" letter-spacing="-1"><tspan fill="#0B1437">trip</tspan><tspan fill="url(#t)">saathi</tspan></text>
+  <text x="70" y="58" font-family="Lato, 'Segoe UI', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="2.2" fill="#6B7489">HAR SAFAR KA SAATHI</text>
+</svg>
