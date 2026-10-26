@@ -4,6 +4,8 @@
   const { $, $$, h, esc, icon, d } = TS;
   const productOf = { flight: 'flights', hotel: 'hotels', holiday: 'holidays', train: 'trains', bus: 'buses', cab: 'cabs', visa: 'visa', forex: 'forex', insurance: 'insurance' };
   const co = TS.checkout.get();
+  // Hotel stays from the TripSaathi API are priced, held and paid on the server.
+  const live = !!(co && co.type === 'hotel' && co.api);
   TS.mountChrome({ page: 'review', product: co ? productOf[co.type] : '' });
   const page = $('#page');
 
@@ -18,11 +20,14 @@
   const st = { addons: new Set(), coupon: null, coins: false, step: 'review' };
   const coupons = D.coupons.filter((c) => c.for.includes(co.type));
   const coinBal = TS.store.get('coins', 500);
+  let quote = null; // server quote (live bookings)
+  let hold = null; // server booking holding the room while the guest pays
   const icons = { flight: 'plane', hotel: 'hotel', holiday: 'holiday', train: 'train', bus: 'bus', cab: 'car', visa: 'visa', forex: 'forex', insurance: 'shield' };
 
   const addonsTotal = () => (co.addons || []).filter((a) => st.addons.has(a.key)).reduce((s, a) => s + a.price * (a.perPax ? Math.max(1, pax.ad + pax.ch) : 1), 0);
   const gross = () => co.base + co.taxes + (co.fees || 0) + addonsTotal();
   const couponOff = (c, g = gross()) => {
+    if (live) return c && quote ? quote.price.discount : 0;
     if (!c) return 0;
     if (c.min && g < c.min) return 0;
     return Math.round(c.pct ? Math.min(c.max || Infinity, (g * c.pct) / 100) : c.flat);
@@ -73,15 +78,16 @@
           <div class="fi"><label>Mobile number</label><input id="cPhone" type="tel" maxlength="10" inputmode="numeric" value="${esc(user ? user.phone : '')}" autocomplete="tel-national"></div>
           <div class="fi"><label>Email</label><input id="cEmail" type="email" autocomplete="email"></div>
           ${co.pickup || co.type === 'forex' ? `<div class="fi" style="grid-column:1/-1"><label>${co.type === 'forex' ? 'Delivery address' : 'Pickup address'}</label><input id="cAddr" autocomplete="street-address"></div>` : ''}
+          ${live ? '<div class="fi" style="grid-column:1/-1"><label>Special requests (optional)</label><input id="specialReq" maxlength="500" placeholder="e.g. early check-in, high floor, airport pickup"></div>' : ''}
         </div><label class="fchk" style="margin-top:10px"><input type="checkbox" checked> <span>Send me booking updates on WhatsApp</span></label></section>
         ${(co.addons || []).length ? `<section class="box" style="margin-bottom:14px"><div class="step-h"><i>${showTravellers ? 4 : 3}</i><h3>Add-ons</h3></div><div style="display:grid;gap:10px">${co.addons.map((a) => `<label class="addon" data-addon="${a.key}"><input type="checkbox"><span><b>${esc(a.label)} · ${TS.inr(a.price)}${a.perPax ? '/traveller' : ''}</b><small>${esc(a.desc)}</small></span></label>`).join('')}</div></section>` : ''}
-        <section class="box" style="margin-bottom:14px"><h4>Important information</h4><p class="small muted" style="margin:0">${policy}</p></section>
+        <section class="box" style="margin-bottom:14px"><h4>Important information</h4><p class="small muted" style="margin:0" id="policyTxt">${policy}</p></section>
         <div class="row-between" style="flex-wrap:wrap"><span class="tiny" style="margin:0">By continuing you agree to the fare rules, cancellation policy and TripSaathi's user agreement.</span><button type="button" class="btn-cta" id="toPay" style="padding:13px 34px;font-size:16px">CONTINUE TO PAYMENT</button></div>
       </div>
       <aside class="rv-side">
         <div class="box fare-sum" id="fareSum"></div>
         <div class="box"><h4>${icon('tag', 16)} Coupons &amp; offers</h4><div class="cpn-in"><input id="cpnIn" placeholder="Enter coupon code"><button type="button" class="btn-out" id="cpnApply">APPLY</button></div><div class="coupons" id="cpnList"></div></div>
-        ${user ? `<label class="box addon" id="coinsBox"><input type="checkbox" id="coins"><span><b>Use TripCoins</b><small>Balance ${TS.num(coinBal)} coins (1 coin = ₹1, up to 10% of fare)</small></span></label>` : ''}
+        ${user && !live ? `<label class="box addon" id="coinsBox"><input type="checkbox" id="coins"><span><b>Use TripCoins</b><small>Balance ${TS.num(coinBal)} coins (1 coin = ₹1, up to 10% of fare)</small></span></label>` : ''}
         <div class="secure">${icon('lock', 14)} 100% secure payments · PCI DSS compliant</div>
       </aside>
     </div>`;
@@ -98,15 +104,44 @@
       ${cOff ? `<div class="row-between disc"><span>Coupon ${st.coupon.code}</span><b>– ${TS.inr(cOff)}</b></div>` : ''}
       ${kOff ? `<div class="row-between disc"><span>TripCoins</span><b>– ${TS.inr(kOff)}</b></div>` : ''}
       <div class="row-between tot"><span>Total amount</span><span>${TS.inr(total())}</span></div>
-      ${cOff + kOff ? `<span class="chip ok" style="margin-top:8px">You save ${TS.inr(cOff + kOff)} on this booking</span>` : ''}`;
+      ${cOff + kOff ? `<span class="chip ok" style="margin-top:8px">You save ${TS.inr(cOff + kOff)} on this booking</span>` : ''}
+      ${live ? `<p class="tiny" style="margin:8px 0 0">${quote ? `${icon(quote.policy.key === 'non_refundable' ? 'x' : 'refund', 12)} ${esc(quote.policy.label)} · Live price from the property, GST included` : 'Checking the latest price…'}</p>` : ''}`;
     const btn = $('#toPay');
     if (btn) btn.textContent = st.step === 'review' ? 'CONTINUE TO PAYMENT' : 'PAY ' + TS.inr(total());
   };
   const drawCoupons = () => {
     const g = gross();
-    $('#cpnList').innerHTML = coupons.length ? coupons.map((c) => { const ok = !c.min || g >= c.min; return `<label class="cpn ${st.coupon === c ? 'on' : ''} ${ok ? '' : 'na'}" data-cpn="${c.code}"><input type="radio" name="cpn" ${st.coupon === c ? 'checked' : ''} ${ok ? '' : 'disabled'}><span><b>${c.code}</b><small>${esc(c.desc)}${ok ? '' : ` · Min. booking ${TS.inr(c.min)}`}</small></span></label>`; }).join('') : '<p class="muted small">No coupons available for this booking.</p>';
+    const list = live ? (quote ? quote.coupons : []) : coupons;
+    $('#cpnList').innerHTML = list.length ? list.map((c) => {
+      const ok = live ? c.eligible : !c.min || g >= c.min;
+      const on = !!st.coupon && st.coupon.code === c.code;
+      const why = live ? c.reason : `Min. booking ${TS.inr(c.min)}`;
+      return `<label class="cpn ${on ? 'on' : ''} ${ok ? '' : 'na'}" data-cpn="${c.code}"><input type="radio" name="cpn" ${on ? 'checked' : ''} ${ok ? '' : 'disabled'}><span><b>${c.code}</b><small>${esc(c.desc)}${ok ? '' : ` · ${esc(why)}`}</small></span></label>`;
+    }).join('') : `<p class="muted small">${live && !quote ? 'Loading offers…' : 'No coupons available for this booking.'}</p>`;
+  };
+  const soldOut = (msg) => TS.modal({ title: 'Sold out', body: `<p>${esc(msg || 'This room is no longer available for your dates.')}</p><a class="btn-cta" href="${esc(co.backUrl || 'index.html')}">CHOOSE ANOTHER ROOM</a>` });
+  // Ask the server for the authoritative price, optionally with a coupon.
+  const requote = async (code) => {
+    try {
+      const r = await TS.api('/bookings/quote', { method: 'POST', body: Object.assign({}, co.api, { coupon: code || undefined }) });
+      if (code && r.quote.coupon.error) { TS.toast(r.quote.coupon.error, 'err'); return; }
+      quote = r.quote;
+      co.base = quote.price.roomCharges;
+      co.taxes = quote.price.taxes;
+      st.coupon = quote.coupon.code ? { code: quote.coupon.code } : null;
+      if (st.coupon) TS.toast(`Coupon ${st.coupon.code} applied – you save ${TS.inr(quote.price.discount)}`, 'ok');
+      const fmt12 = (t) => { const [H, M] = t.split(':').map(Number); return ((H + 11) % 12) + 1 + ':' + String(M).padStart(2, '0') + ' ' + (H < 12 ? 'AM' : 'PM'); };
+      $('#policyTxt').textContent = `Check-in from ${fmt12(quote.property.checkInTime)}, check-out by ${fmt12(quote.property.checkOutTime)}. Valid photo ID is mandatory for all guests. Cancellation: ${quote.policy.detail}.`;
+      if (quote.soldOut) soldOut();
+    } catch (err) {
+      if (err.status === 404) soldOut('This room option is no longer offered. Please pick another room.');
+      else TS.toast(err.message, 'err');
+    }
+    drawCoupons();
+    drawFare();
   };
   const applyCode = (code) => {
+    if (live) { const c = code.trim().toUpperCase(); if (c) requote(st.coupon && st.coupon.code === c ? null : c); return; }
     const c = D.coupons.find((x) => x.code === code.trim().toUpperCase());
     if (!c) { TS.toast('Invalid coupon code', 'err'); return; }
     if (!c.for.includes(co.type)) { TS.toast(`${c.code} is not valid for this booking`, 'err'); return; }
@@ -131,6 +166,7 @@
   page.addEventListener('input', (e) => { const fi = e.target.closest('.fi'); if (fi) fi.classList.remove('err'); });
   drawCoupons();
   drawFare();
+  if (live) requote(null);
 
   /* ------------------------------------------------------------ timer */
   let left = 15 * 60;
@@ -175,7 +211,7 @@
 
   /* ------------------------------------------------------------ payment */
   const openPayment = (info) => {
-    const amt = total();
+    const amt = live ? hold.price.total : total();
     const body = h(`<div><div class="row-between" style="margin-bottom:14px"><span class="muted">${esc(co.title)}</span><b style="font-size:20px">${TS.inr(amt)}</b></div>
       <div class="pay"><div class="pay-tabs">${[['upi', 'wallet', 'UPI'], ['card', 'forex', 'Credit / Debit Card'], ['nb', 'globe', 'Net Banking'], ['later', 'clock', 'Pay Later']].map(([k, ic, l], i) => `<button type="button" data-pt="${k}" class="${i ? '' : 'on'}">${icon(ic, 16)} ${l}</button>`).join('')}</div><div class="pay-body" id="payBody"></div></div>
       <button type="button" class="btn-cta btn-block" id="payNow" style="margin-top:14px;padding:14px;font-size:16px">PAY ${TS.inr(amt)}</button><div class="secure">${icon('lock', 14)} Payments are processed securely. This is a demo – no real money is charged.</div></div>`);
@@ -184,7 +220,7 @@
     const drawTab = () => {
       const pb = $('#payBody', body);
       if (tab === 'upi') pb.innerHTML = `<div class="upi-apps">${[['SaathiPay', '#f0386b'], ['QuickUPI', '#6d28d9'], ['PayNest', '#2563eb'], ['Other UPI app', '#0891b2']].map(([n, c]) => `<button type="button" data-sub="${n}" class="${sub === n ? 'on' : ''}"><i style="background:${c}"></i>${n}</button>`).join('')}</div><div class="fi"><label>Or enter UPI ID</label><input id="upiId" placeholder="yourname@bank"></div><p class="tiny">You'll receive a payment request on your UPI app.</p>`;
-      else if (tab === 'card') pb.innerHTML = `<div class="form-grid g2"><div class="fi" style="grid-column:1/-1"><label>Card number</label><input id="cardNo" inputmode="numeric" maxlength="19" placeholder="XXXX XXXX XXXX XXXX"></div><div class="fi" style="grid-column:1/-1"><label>Name on card</label><input id="cardName"></div><div class="fi"><label>Expiry (MM/YY)</label><input id="cardExp" maxlength="5" placeholder="MM/YY"></div><div class="fi"><label>CVV</label><input id="cardCvv" type="password" maxlength="4" inputmode="numeric"></div></div><p class="tiny">Demo tip: use any 16-digit number and a future expiry date.</p>`;
+      else if (tab === 'card') pb.innerHTML = `<div class="form-grid g2"><div class="fi" style="grid-column:1/-1"><label>Card number</label><input id="cardNo" inputmode="numeric" maxlength="19" placeholder="XXXX XXXX XXXX XXXX"></div><div class="fi" style="grid-column:1/-1"><label>Name on card</label><input id="cardName"></div><div class="fi"><label>Expiry (MM/YY)</label><input id="cardExp" maxlength="5" placeholder="MM/YY"></div><div class="fi"><label>CVV</label><input id="cardCvv" type="password" maxlength="4" inputmode="numeric"></div></div><p class="tiny">Demo tip: use any 16-digit number and a future expiry date${live ? ' – a card ending in 0002 is declined' : ''}.</p>`;
       else if (tab === 'nb') pb.innerHTML = `<div class="banks">${['Sahyadri Bank', 'Ganga Bank', 'Harbour Bank', 'Deccan Bank', 'Lotus Bank', 'Banyan Bank'].map((n) => `<button type="button" data-sub="${n}" class="${sub === n ? 'on' : ''}">${n}</button>`).join('')}</div><p class="tiny">You'll be redirected to your bank's secure page.</p>`;
       else pb.innerHTML = `<div class="it-simple">${icon('clock', 26)}<div><b>Book now, pay in 15 days</b><small>No-cost pay later for eligible users. Approval is instant.</small></div></div>`;
     };
@@ -215,18 +251,37 @@
       }
       if (tab === 'nb' && !sub) { TS.toast('Please select your bank', 'err'); return; }
       if (!ok) { TS.toast('Please check your payment details', 'err'); return; }
+      // Only the method and non-sensitive hints go to our server; card numbers never leave the browser.
+      const payload = { method: { upi: 'upi', card: 'card', nb: 'netbanking', later: 'paylater' }[tab] };
+      if (tab === 'upi' && $('#upiId', body).value.trim()) payload.upiId = $('#upiId', body).value.trim();
+      if (tab === 'card') payload.cardLast4 = $('#cardNo', body).value.replace(/\s/g, '').slice(-4);
+      if (tab === 'nb') payload.bank = sub;
       $('.modal-body', m.el).innerHTML = `<div class="processing"><div class="spinner"></div><h3>Processing your payment…</h3><p class="muted">Please do not close or refresh this window.</p></div>`;
-      setTimeout(() => { m.close(); confirmBooking(info, amt, tab); }, 1700);
+      if (!live) { setTimeout(() => { m.close(); confirmBooking(info, amt, tab); }, 1700); return; }
+      TS.api(`/bookings/${hold.id}/pay`, { method: 'POST', body: payload }).then((r) => {
+        m.close();
+        confirmBooking(info, r.booking.price.total, tab, r.booking);
+      }, (err) => {
+        m.close();
+        if (err.code === 'hold_expired' || err.code === 'not_payable') {
+          hold = null;
+          TS.modal({ title: 'Booking window expired', body: `<p>${esc(err.message)}</p><a class="btn-cta" href="${esc(co.backUrl || 'index.html')}">SEARCH AGAIN</a>` });
+        } else {
+          TS.toast(err.message, 'err');
+        }
+      });
     });
   };
 
-  const confirmBooking = (info, amt, method) => {
+  const confirmBooking = (info, amt, method, apiBooking) => {
     clearInterval(tick);
-    const id = 'TS' + { flight: 'F', hotel: 'H', holiday: 'P', train: 'T', bus: 'B', cab: 'C', visa: 'V', forex: 'X', insurance: 'I' }[co.type] + String(Date.now()).slice(-8);
+    const id = apiBooking ? apiBooking.id : 'TS' + { flight: 'F', hotel: 'H', holiday: 'P', train: 'T', bus: 'B', cab: 'C', visa: 'V', forex: 'X', insurance: 'I' }[co.type] + String(Date.now()).slice(-8);
     const earned = Math.round(amt * 0.02);
-    if (user) TS.store.set('coins', coinBal - coinsOff() + earned);
+    const member = TS.auth.user();
+    if (member) TS.store.set('coins', coinBal - coinsOff() + earned);
     const b = { id, type: co.type, title: co.title, subtitle: co.subtitle, date: co.date, endDate: co.endDate || co.date, amount: amt, status: 'confirmed', createdAt: new Date().toISOString(), itinerary: co.itinerary, travellers: info.travellers.map((t) => t.name).filter(Boolean), contact: info.contact, method, coupon: st.coupon ? st.coupon.code : '' };
-    TS.bookings.add(b);
+    // Live hotel bookings are stored on the server and listed in My Trips from there.
+    if (!apiBooking) TS.bookings.add(b);
     try { sessionStorage.removeItem('ts_checkout'); } catch (e) { /* ignore */ }
     TS.store.del('checkout');
     page.innerHTML = `<div class="box confirm" style="max-width:820px;margin:20px auto">
@@ -236,16 +291,53 @@
       <span class="bid">Booking ID: ${id}</span>
       <div style="text-align:left;margin:16px 0">${co.itinerary}</div>
       ${b.travellers.length ? `<div class="box" style="text-align:left;box-shadow:none;border:1px solid var(--line)"><h4>${co.primaryOnly ? 'Guest' : 'Travellers'}</h4>${info.travellers.map((t, i) => `<div class="row-between" style="padding:4px 0"><span>${i + 1}. ${esc(t.name)}${t.age ? ', ' + esc(t.age) + ' yrs' : ''}</span><span class="muted small">${t.gender === 'M' ? 'Male' : 'Female'}${co.seatLabels ? ' · Seat ' + co.seatLabels[i] : ''}</span></div>`).join('')}</div>` : ''}
-      <div class="row-between" style="margin:16px 0 4px;flex-wrap:wrap"><span>Amount paid <b style="font-size:20px">${TS.inr(amt)}</b> <span class="muted small">via ${{ upi: 'UPI', card: 'Card', nb: 'Net Banking', later: 'Pay Later' }[method]}</span></span>${user ? `<span class="chip ok">+${earned} TripCoins earned</span>` : ''}</div>
+      ${apiBooking && apiBooking.specialRequests ? `<p class="small" style="text-align:left"><b>Special requests:</b> ${esc(apiBooking.specialRequests)} <span class="muted">(shared with the property)</span></p>` : ''}
+      ${apiBooking ? `<p class="small muted" style="text-align:left">${icon(apiBooking.cancellationPolicy.key === 'non_refundable' ? 'x' : 'refund', 14)} ${esc(apiBooking.cancellationPolicy.detail)}</p>` : ''}
+      <div class="row-between" style="margin:16px 0 4px;flex-wrap:wrap"><span>Amount paid <b style="font-size:20px">${TS.inr(amt)}</b> <span class="muted small">via ${{ upi: 'UPI', card: 'Card', nb: 'Net Banking', later: 'Pay Later' }[method]}</span></span>${member ? `<span class="chip ok">+${earned} TripCoins earned</span>` : ''}</div>
       <div class="row" style="justify-content:center;margin-top:18px;flex-wrap:wrap"><a class="btn-cta" href="mytrips.html">VIEW MY TRIPS</a><a class="btn-out" href="index.html">BOOK ANOTHER TRIP</a></div>
     </div>`;
     window.scrollTo({ top: 0 });
     TS.toast('Booking confirmed – ' + id, 'ok');
   };
 
+  // Live hotels: log in, then hold the room on the server before taking payment.
+  const holdRoom = async (info) => {
+    if (!TS.auth.user()) { TS.openLogin(() => holdRoom(info)); return; }
+    if (hold && new Date(hold.holdExpiresAt) > new Date()) { openPayment(info); return; }
+    const btn = $('#toPay');
+    btn.disabled = true;
+    btn.textContent = 'HOLDING YOUR ROOM…';
+    const lead = $('.trav');
+    const val = (k) => $(`[data-k="${k}"]`, lead).value.trim();
+    const g = $('.seg-btns .on', lead);
+    try {
+      const r = await TS.api('/bookings', {
+        method: 'POST',
+        body: Object.assign({}, co.api, {
+          coupon: st.coupon ? st.coupon.code : undefined,
+          guest: { firstName: val('first'), lastName: val('last'), gender: g ? g.dataset.v : undefined, email: info.contact.email, phone: info.contact.phone },
+          specialRequests: $('#specialReq') ? $('#specialReq').value.trim() : '',
+        }),
+      });
+      hold = r.booking;
+      left = Math.max(1, Math.round((new Date(hold.holdExpiresAt) - Date.now()) / 1000));
+      st.step = 'pay';
+      if (hold.price.total !== total()) TS.toast(`The price was updated to ${TS.inr(hold.price.total)}`, 'err');
+      openPayment(info);
+    } catch (err) {
+      if (err.code === 'sold_out') soldOut(err.message);
+      else if (err.status === 401) TS.openLogin(() => holdRoom(info));
+      else TS.toast(err.message, 'err');
+    } finally {
+      btn.disabled = false;
+      drawFare();
+    }
+  };
+
   $('#toPay').addEventListener('click', () => {
     const info = collect();
     if (!info) return;
+    if (live) { holdRoom(info); return; }
     st.step = 'pay';
     drawFare();
     openPayment(info);

@@ -1,0 +1,21 @@
+{
+  "name": "tripsaathi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TripSaathi – travel booking site with a hotel onboarding & booking backend",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "start": "node scripts/dev.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.js\"",
+    "db:migrate": "node scripts/db.js migrate",
+    "db:seed": "node scripts/db.js seed"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "pg": "8.23.1"
+  }
+}

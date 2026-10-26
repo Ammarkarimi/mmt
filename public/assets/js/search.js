@@ -168,7 +168,7 @@
     const guests = () => ({ v: `<b>${st.rooms}</b> <span class="mo">Room${st.rooms > 1 ? 's' : ''}</span> <b>${st.ad + st.ch}</b> <span class="mo">${st.ch ? 'Guests' : 'Adult' + (st.ad > 1 ? 's' : '')}</span>`, s: st.ch ? `${st.ad} Adults, ${st.ch} Child${st.ch > 1 ? 'ren' : ''}` : '&nbsp;' });
     const render = () => {
       const band = priceBands.find((b) => b[0] === st.price) || priceBands[0];
-      root.innerHTML = `<div class="sw-top"><div class="trip-types">${radio('hmode', 'upto4', 'Upto 4 Rooms', st.mode === 'upto4')}${radio('hmode', 'group', 'Group Deals <span class="badge-new">new</span>', st.mode === 'group')}</div>${opts.compact ? '' : `<span class="sw-note">Book Domestic and International ${type === 'homestay' ? 'Homestays & Villas' : 'Property'} Online. To list your property <a href="#" data-list>click here</a></span>`}</div>
+      root.innerHTML = `<div class="sw-top"><div class="trip-types">${radio('hmode', 'upto4', 'Upto 4 Rooms', st.mode === 'upto4')}${radio('hmode', 'group', 'Group Deals <span class="badge-new">new</span>', st.mode === 'group')}</div>${opts.compact ? '' : `<span class="sw-note">Book Domestic and International ${type === 'homestay' ? 'Homestays & Villas' : 'Property'} Online. To list your property <a href="partner.html">click here</a></span>`}</div>
         <div class="flds flds-hotel">
           ${fld('city', type === 'homestay' ? 'City, Area or Property' : 'City, Property Name Or Location', city())}
           ${fld('in', 'Check-In', dateParts(st.in))}
@@ -201,7 +201,6 @@
     wire(root, (e) => {
       const tgt = e.target;
       if (e.radio && tgt.name === 'hmode') { if (tgt.value === 'group') { TS.toast('Group deals: book 5+ rooms at special prices – our team will reach out'); } st.mode = tgt.value; render(); return; }
-      if (tgt.closest('[data-list]')) { e.preventDefault && e.preventDefault(); TS.toast('List your property – coming soon in this demo'); return; }
       const tr = tgt.closest('[data-trend]');
       if (tr) { st.city = tr.dataset.trend; render(); return; }
       const f = tgt.closest('[data-f]');

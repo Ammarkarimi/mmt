@@ -46,6 +46,34 @@
     set(k, v) { try { localStorage.setItem('ts_' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
     del(k) { try { localStorage.removeItem('ts_' + k); } catch (e) { /* ignore */ } },
   };
+
+  /* ================================================================ API client */
+  // Guests and hotel partners/admins keep separate sessions in the same browser.
+  const TOKEN_KEY = { guest: 'token', partner: 'ptoken' };
+  TS.api = async (path, { method = 'GET', body, realm = 'guest' } = {}) => {
+    const token = TS.store.get(TOKEN_KEY[realm], null);
+    const headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (token) headers.Authorization = 'Bearer ' + token;
+    let res;
+    try {
+      res = await fetch('/api' + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    } catch (e) {
+      throw Object.assign(new Error('Could not reach TripSaathi. Please check your connection and try again.'), { status: 0, code: 'network' });
+    }
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* not JSON */ }
+    if (!res.ok) {
+      const err = (data && data.error) || {};
+      if (res.status === 401 && token) {
+        TS.store.del(TOKEN_KEY[realm]);
+        if (realm === 'guest') { TS.store.del('user'); if (TS.renderAccount) TS.renderAccount(); } else TS.store.del('puser');
+      }
+      throw Object.assign(new Error(err.message || `Request failed (${res.status})`), { status: res.status, code: err.code, details: err.details });
+    }
+    return data;
+  };
+
   TS.km = (a, b) => {
     const R = 6371, toR = (x) => (x * Math.PI) / 180;
     const dLat = toR(b.lat - a.lat), dLon = toR(b.lon - a.lon);
@@ -562,9 +590,10 @@
 
   /* ================================================================ Auth, bookings, checkout */
   TS.auth = {
-    user: () => TS.store.get('user', null),
-    login(u) { TS.store.set('user', u); TS.renderAccount(); },
-    logout() { TS.store.del('user'); TS.renderAccount(); TS.toast('You have been logged out'); },
+    // A profile without a server session (e.g. from before the backend existed) counts as logged out.
+    user: () => (TS.store.get('token', null) ? TS.store.get('user', null) : null),
+    login(u, token) { TS.store.set('user', u); if (token) TS.store.set('token', token); TS.renderAccount(); },
+    logout() { TS.store.del('user'); TS.store.del('token'); TS.renderAccount(); TS.toast('You have been logged out'); },
   };
   TS.bookings = {
     all: () => TS.store.get('bookings', []),
@@ -595,8 +624,9 @@
         </div>
         <div class="login-step hide" data-step="2">
           <button class="link-btn" data-act="back">${TS.icon('arrowL', 16)} Change number</button>
-          <p class="muted">Enter the 6-digit OTP sent to <b class="otp-ph"></b><br><small>Demo tip: use any 6 digits.</small></p>
+          <p class="muted">Enter the 6-digit OTP sent to <b class="otp-ph"></b><br><small class="otp-demo"></small></p>
           <div class="otp">${'<input maxlength="1" inputmode="numeric">'.repeat(6)}</div>
+          <button class="link-btn otp-resend" data-act="resend" type="button">Resend OTP</button>
           <label class="lbl">Your Name <small>(optional)</small></label>
           <input class="txt" type="text" placeholder="e.g. Aarav Sharma" data-name>
           <button class="btn-cta btn-block" data-act="verify">VERIFY & LOGIN</button>
@@ -618,27 +648,50 @@
       o.addEventListener('input', () => { o.value = o.value.replace(/\D/g, ''); if (o.value && otps[i + 1]) otps[i + 1].focus(); });
       o.addEventListener('keydown', (e) => { if (e.key === 'Backspace' && !o.value && otps[i - 1]) otps[i - 1].focus(); });
     });
-    body.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-act]');
-      if (!a) return;
-      const act = a.dataset.act;
-      if (act === 'cont') {
-        if (!/^[6-9]\d{9}$/.test(phone.value)) { TS.toast('Please enter a valid 10-digit mobile number', 'err'); return; }
+    const busy = (btn, on, label) => { btn.disabled = on; if (label) btn.textContent = label; };
+    const sendOtp = async (btn) => {
+      const label = btn.textContent;
+      busy(btn, true, 'SENDING OTP…');
+      try {
+        const r = await TS.api('/auth/otp', { method: 'POST', body: { phone: phone.value } });
         TS.$('.otp-ph', body).textContent = '+91 ' + phone.value;
+        // Until an SMS gateway is connected the server returns the code so the demo stays usable.
+        TS.$('.otp-demo', body).textContent = r.demoCode ? `Demo mode – no SMS is sent. Your OTP is ${r.demoCode}.` : 'It may take a few seconds to arrive.';
+        otps.forEach((o) => { o.value = ''; });
         TS.$('[data-step="1"]', body).classList.add('hide');
         TS.$('[data-step="2"]', body).classList.remove('hide');
         otps[0].focus();
+      } catch (err) {
+        TS.toast(err.message, 'err');
+      } finally {
+        busy(btn, false, label);
+      }
+    };
+    body.addEventListener('click', async (e) => {
+      const a = e.target.closest('[data-act]');
+      if (!a || a.disabled) return;
+      const act = a.dataset.act;
+      if (act === 'cont' || act === 'resend') {
+        if (!/^[6-9]\d{9}$/.test(phone.value)) { TS.toast('Please enter a valid 10-digit mobile number', 'err'); return; }
+        sendOtp(a);
       } else if (act === 'back') {
         TS.$('[data-step="2"]', body).classList.add('hide');
         TS.$('[data-step="1"]', body).classList.remove('hide');
       } else if (act === 'verify') {
         const code = otps.map((o) => o.value).join('');
         if (code.length !== 6) { TS.toast('Please enter the 6-digit OTP', 'err'); return; }
-        const name = TS.$('[data-name]', body).value.trim() || 'Traveller';
-        TS.auth.login({ name, phone: phone.value, biz });
-        m.close();
-        TS.toast(`Welcome, ${name}! You're now logged in.`, 'ok');
-        after && after();
+        const name = TS.$('[data-name]', body).value.trim();
+        busy(a, true, 'VERIFYING…');
+        try {
+          const r = await TS.api('/auth/otp/verify', { method: 'POST', body: { phone: phone.value, code, name: name || undefined } });
+          TS.auth.login(Object.assign({}, r.user, { biz }), r.token);
+          m.close();
+          TS.toast(`Welcome, ${r.user.name}! You're now logged in.`, 'ok');
+          after && after();
+        } catch (err) {
+          TS.toast(err.message, 'err');
+          busy(a, false, 'VERIFY & LOGIN');
+        }
       } else if (act === 'email') {
         TS.toast('Email login is not available in this demo – please use your mobile number');
       }
@@ -690,7 +743,7 @@
         ${TS.logo(home ? 'light' : 'dark')}
         ${home ? '' : `<nav class="hnav" aria-label="Products">${nav}</nav>`}
         <div class="hdr-right">
-          <a class="hdr-item hide-md" href="#" data-demo="List your property">${TS.icon('property', 22)}<span><b>List Your Property</b><small>Grow your business!</small></span></a>
+          <a class="hdr-item hide-md" href="partner.html">${TS.icon('property', 22)}<span><b>List Your Property</b><small>Grow your business!</small></span></a>
           ${home ? `<a class="hdr-item hide-md" href="#" data-demo="${TS.brand.name} for Business">${TS.icon('briefcase', 22)}<span><b>Introducing TS Biz</b><small>Business Travel Solution</small></span></a>` : ''}
           <a class="hdr-item" href="mytrips.html">${TS.icon('bag', 22)}<span><b>My Trips</b><small>Manage your bookings</small></span></a>
           <div class="hdr-acct"></div>
@@ -731,7 +784,7 @@
           <div><h5>Popular Flight Routes</h5>${routes}</div>
           <div><h5>Popular Hotels</h5>${cityHotels}</div>
           <div><h5>Product Offering</h5><a href="index.html?tab=flights">Flights</a><a href="index.html?tab=hotels">Hotels</a><a href="holidays.html">Holiday Packages</a><a href="index.html?tab=homestays">Homestays &amp; Villas</a><a href="index.html?tab=trains">Trains</a><a href="index.html?tab=buses">Buses</a><a href="index.html?tab=cabs">Cabs</a><a href="index.html?tab=visa">Visa</a><a href="index.html?tab=forex">Forex Card</a><a href="index.html?tab=insurance">Travel Insurance</a><a href="offers.html">Offers</a></div>
-          <div><h5>${TS.brand.name}</h5><a href="#" data-demo="About us">About Us</a><a href="#" data-demo="Investor relations">Investor Relations</a><a href="#" data-demo="Careers">Careers</a><a href="#" data-demo="Partner with us">Partner With Us</a><a href="#" data-demo="TS Biz">TS Biz – Corporate Travel</a><a href="#" data-demo="Gift cards">Gift Cards</a><a href="#" data-demo="Travel blog">Travel Blog</a></div>
+          <div><h5>${TS.brand.name}</h5><a href="#" data-demo="About us">About Us</a><a href="#" data-demo="Investor relations">Investor Relations</a><a href="#" data-demo="Careers">Careers</a><a href="partner.html">List Your Property</a><a href="#" data-demo="TS Biz">TS Biz – Corporate Travel</a><a href="#" data-demo="Gift cards">Gift Cards</a><a href="#" data-demo="Travel blog">Travel Blog</a></div>
           <div><h5>About the Site</h5><a href="#" data-demo="Customer support">Customer Support</a><a href="#" data-demo="Payment security">Payment Security</a><a href="#" data-demo="Privacy policy">Privacy Policy</a><a href="#" data-demo="User agreement">User Agreement</a><a href="#" data-demo="Terms of service">Terms of Service</a><a href="#" data-demo="Report a security issue">Report Security Issue</a></div>
         </div>
       </div>
